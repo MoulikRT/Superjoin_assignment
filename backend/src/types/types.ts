@@ -12,7 +12,7 @@ export interface SQLPayload{
 export interface SyncEvent {
     type: 'INSERT' | 'UPDATE' | 'DELETE' ;
     row? : number;
-    col? : number;
+    col? : string; 
     oldValue? : string;
     newValue? : string;
     source: 'sheet' | 'db';
@@ -25,7 +25,7 @@ export interface SyncEvent {
 
 export interface JobData{
     row: number;
-    col: number;
+    col: string;  // Fixed: string not number
     value: string;
     sheetId: string;
     timestamp: number;
@@ -36,5 +36,4 @@ export interface SQLResult{
     data?: any;
     error?: string;
     rowsAffected?: number;
-
 }

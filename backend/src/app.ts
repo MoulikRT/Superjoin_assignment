@@ -8,6 +8,7 @@ import redisClient from './config/redis';
 import webhookRoutes from './routes/webhook_routes';
 import sqlRoutes from './routes/sqlroutes';
 import setupRoutes from './routes/setup.routes';
+import configRoutes from './routes/config.routes';
 import './workers/sheetUpdateWorker';
 import cdcMonitor from './services/cdcMonitor';
 
@@ -56,9 +57,11 @@ app.get('/health', async (req:Request, res:Response) => {
     });
 });
 
-app.use('/api/webhook', webhookRoutes); 
+// Routes
+app.use('/api/webhook', webhookRoutes);
 app.use('/api/sql', sqlRoutes);
 app.use('/api/setup', setupRoutes);
+app.use('/api/config', configRoutes);
 
 // 404 handler
 app.use((req:Request, res:Response) => {

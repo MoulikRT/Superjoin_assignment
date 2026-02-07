@@ -1,18 +1,39 @@
 import { Worker, Job } from 'bullmq';
 import redisClient from '../config/redis';
 import pool from '../config/database';
+import lockService from '../services/lockService';
 import { JobData } from '../types/types';
 import pino from 'pino';
 
-const logger = pino();
+const logger = pino({
+    transport: {
+        target: 'pino-pretty',
+        options: {
+            colorize: true,
+            translateTime: 'HH:MM:ss',
+            ignore: 'pid,hostname',
+        },
+    },
+});
 
 const sheetUpdateWorker = new Worker(
     'sheet-update',
     async (job: Job<JobData>) => {
         const { row, col, value, sheetId, timestamp } = job.data;
+        const lockOwner = `job:${job.id}`;
+
+        console.log(`\n🔄 [Job ${job.id}] Processing cell ${col}${row} = "${value}"`);
 
         try {
-            logger.info({ row, col, value }, 'Processing sheet update job');
+            console.log(`🔒 [Job ${job.id}] Attempting to acquire lock for ${col}${row}...`);
+            const locked = await lockService.acquireLock(row, col, lockOwner);
+
+            if (!locked) {
+                console.log(`❌ [Job ${job.id}] Failed to acquire lock for ${col}${row}`);
+                throw new Error(`Could not acquire lock for ${col}${row}`);
+            }
+
+            console.log(`✅ [Job ${job.id}] Lock acquired for ${col}${row}`);
 
             const [existing] = await pool.query<any[]>(
                 'SELECT * FROM users WHERE row_num = ? AND col_name = ?',
@@ -26,45 +47,41 @@ const sheetUpdateWorker = new Worker(
                      WHERE row_num = ? AND col_name = ?`,
                     [value, 'user', row, col]
                 );
-                logger.info({ row, col }, 'Cell updated');
+                console.log(`📝 [Job ${job.id}] Updated ${col}${row} = "${value}"`);
             } else {
                 await pool.query(
                     `INSERT INTO users (row_num, col_name, cell_value, last_modified_by)
                      VALUES (?, ?, ?, ?)`,
                     [row, col, value, 'user']
                 );
-                logger.info({ row, col }, 'Cell inserted');
+                console.log(`📝 [Job ${job.id}] Inserted ${col}${row} = "${value}"`);
             }
+
+            await lockService.releaseLock(row, col, lockOwner);
+            console.log(`🔓 [Job ${job.id}] Lock released for ${col}${row}`);
 
             return { success: true, row, col, value };
         } catch (error) {
-            logger.error({ error }, 'Job processing failed');
+            await lockService.releaseLock(row, col, lockOwner);
+            console.log(`❌ [Job ${job.id}] Error: ${error}`);
             throw error;
         }
     },
     {
         connection: redisClient,
         concurrency: 5,
-        limiter: {
-            max: 10,
-            duration: 1000,
-        },
     }
 );
 
 sheetUpdateWorker.on('completed', (job) => {
-    logger.info({ jobId: job?.id }, 'Job completed');
+    console.log(`✅ [Job ${job?.id}] Completed successfully\n`);
 });
 
 sheetUpdateWorker.on('failed', (job, err) => {
-    logger.error({ jobId: job?.id, error: err }, 'Job failed');
+    console.log(`❌ [Job ${job?.id}] Failed: ${err.message}\n`);
 });
 
-sheetUpdateWorker.on('error', (err) => {
-    logger.error({ error: err }, 'Worker error');
-});
-
-logger.info('Sheet update worker started');
+console.log('🚀 Sheet update worker started');
 
 export default sheetUpdateWorker;
 

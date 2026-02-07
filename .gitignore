@@ -5,3 +5,7 @@ backend/.env
 .vscode/
 .DS_Store
 backend/credentials/
+
+//frontend
+frontend/node_modules/
+frontend/.env
