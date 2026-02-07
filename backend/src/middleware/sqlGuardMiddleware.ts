@@ -4,7 +4,7 @@ import pino from 'pino';
 const logger = pino();
 
 const BLOCKED_KEYWORDS = [
-    'DROP', 'TRUNCATE', 'CREATE DATABASE', 'DROP DATABASE', 'GRANT','REVOFKE',
+    'DROP', 'TRUNCATE', 'CREATE DATABASE', 'DROP DATABASE', 'GRANT', 'REVOKE',
 ]
 
 export function sqlGuard(req: Request, res : Response, next: NextFunction) {
@@ -14,12 +14,12 @@ export function sqlGuard(req: Request, res : Response, next: NextFunction) {
         return;
     }
 
-    const upperQuery = query.toUpperCase();
-    
+    const upperQuery = query.trim().toUpperCase();
+
     for(const keyword of BLOCKED_KEYWORDS) {
         if(upperQuery.includes(keyword)) {
             logger.warn({query}, `Blocked potentially dangerous SQL query containing keyword: ${keyword}`);
-            res.status(403).json({error: 'Forbidden SQL query'});
+            res.status(403).json({error: `"${keyword}" commands are not allowed`});
             return;
         }
     }

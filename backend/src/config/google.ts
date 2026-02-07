@@ -1,20 +1,28 @@
-import {google } from 'googleapis';
+import { google } from 'googleapis';
+import { JWT } from 'google-auth-library';
 import dotenv from 'dotenv';
-dotenv.config();
 import pino from 'pino';
-import { auth } from 'google-auth-library';
 
+dotenv.config();
 const logger = pino();
 
-const auth = new google.auth.GoogleAuth({
-    projectId: process.env.GOOGLE_PROJECT_ID,
-    credentials: {
-        type: 'service_account',
-        client_email: process.env.GOOGLE_CLIENT_EMAIL,
-        private_key: process.env.GOOGLE_PRIVATE_KEY?.replace(/\\n/g, '\n')
-    },
+// Create JWT client for service account authentication
+const jwtClient = new JWT({
+    email: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
+    key: process.env.GOOGLE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
+    scopes: ['https://www.googleapis.com/auth/spreadsheets'],
 });
 
-const sheets = google.sheets({version: 'v4', auth});
-logger.info('Google Sheets client initialized');
-export { auth, sheets };
+// Authenticate
+jwtClient.authorize((err) => {
+    if (err) {
+        logger.error({ err }, 'Google Sheets authentication failed');
+    } else {
+        logger.info('Google Sheets authenticated successfully');
+    }
+});
+
+// Create sheets API client
+export const sheets = google.sheets({ version: 'v4', auth: jwtClient });
+
+export default sheets;

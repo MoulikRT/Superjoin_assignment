@@ -4,7 +4,11 @@ import pino from "pino";
 
 dotenv.config();
 const logger = pino();
-const client = new Redis(process.env.REDIS_URL!);
+
+const client = new Redis(process.env.REDIS_URL!, {
+    maxRetriesPerRequest: null,  
+    enableReadyCheck: false,
+});
 
 client.on("connect", () => {
     logger.info("Connected to Redis");

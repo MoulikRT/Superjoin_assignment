@@ -3,12 +3,13 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import helmet from 'helmet';
 import pino from 'pino'
-import { testDatabaseConnection } from './utils/dbInit';    
+import { testDatabaseConnection } from './utils/dbInit';
 import redisClient from './config/redis';
-import { sql } from 'googleapis/build/src/apis/sql';
-
+import webhookRoutes from './routes/webhook_routes';
 import sqlRoutes from './routes/sqlroutes';
-import webhookRoutes from './routes/webhook_routes'; 
+import './workers/sheetUpdateWorker';
+import cdcMonitor from './services/cdcMonitor';
+
 dotenv.config();
 
 const app: Express = express();
@@ -21,11 +22,6 @@ app.use(helmet());
 app.use(cors());
 app.use(express.json({limit: '10mb'}));
 app.use(express.urlencoded({limit: '10mb',extended: true}));
-app.use(express.static('public'));
-
-//routes
-app.use('/api/sql', sqlRoutes);
-app.use('/api/webhook',webhookRoutes);
 
 //logger middleware
 app.use((req:Request, res:Response, next:NextFunction) => {
@@ -43,7 +39,7 @@ app.use((req:Request, res:Response, next:NextFunction) => {
     next();
 });
 
-// Health endpoint - use GET not use()
+// Health endpoint
 app.get('/health', async (req:Request, res:Response) => {
     const dbConnected = await testDatabaseConnection();
     const redisConnected = redisClient.status === 'ready';
@@ -59,13 +55,9 @@ app.get('/health', async (req:Request, res:Response) => {
     });
 });
 
-app.post('/api/webhook', (req:Request, res:Response) => {
-    res.status(202).json({message: 'Webhook received'});
-});
-
-app.post('/api/sql/execute', (req:Request, res:Response) => {
-    res.status(200).json({message: 'SQL executed'});
-});
+// Routes
+app.use('/api/webhook', webhookRoutes);
+app.use('/api/sql', sqlRoutes);
 
 // 404 handler
 app.use((req:Request, res:Response) => {
@@ -74,12 +66,15 @@ app.use((req:Request, res:Response) => {
 
 // Error handler
 app.use((err:any, req:Request, res:Response, next:NextFunction)=>{
-    logger.error(err);
+    logger.error({ err }, 'Internal server error');
     res.status(500).json({error: 'Internal Server Error'});
 });
 
-app.listen(PORT, ()=>{
+app.listen(PORT, async () => {
     logger.info(`Server running in ${NODE_ENV} mode on port ${PORT}`);
+    
+    // Start CDC Monitor
+    await cdcMonitor.start();
 });
 
 export default app;
